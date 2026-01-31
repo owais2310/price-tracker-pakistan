@@ -1,17 +1,17 @@
-name: SaleSpy Daily Scan
+name: SaleSpy Daily Scan (Enterprise)
 
 on:
   schedule:
-    # Run every day at 5:00 AM UTC (10:00 AM Pakistan Time)
+    # Run every day at 10:00 AM PKT (5:00 UTC)
     - cron: '0 5 * * *'
-  workflow_dispatch: # Allows you to click a button to run it manually for testing
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # CRITICAL: Allows the robot to save the CSV back to the repo
-
+      contents: write
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,18 +21,32 @@ jobs:
         with:
           python-version: '3.9'
 
+      # 1. Install Libraries
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 flask
+          pip install requests beautifulsoup4 flask playwright
+          
+      # 2. Install Cloud Browsers (Crucial for Playwright)
+      - name: Install Playwright Browsers
+        run: |
+          playwright install --with-deps chromium
 
-      - name: Run SaleSpy Scraper
+      # 3. Run Harvester (Find New Products)
+      # Note: This might take 10-15 mins. We let it run.
+      - name: Run Ultimate Harvester
+        run: |
+          python ultimate_harvester.py
+
+      # 4. Run Price Tracker (Check 1500+ Prices)
+      - name: Run Enterprise Tracker
         run: |
           python data_collector.py
 
-      - name: Commit and Push Changes
+      # 5. Save Data
+      - name: Commit and Push Data
         run: |
           git config --global user.name "SaleSpy Bot"
           git config --global user.email "bot@salespy.com"
-          git add prices.csv
-          # Only commit if the file actually changed
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Dhoka Check: Updated Prices" && git push)
+          git add prices.csv links.txt
+          # Only commit if data changed
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Dhoka Check: Daily Update" && git push)
