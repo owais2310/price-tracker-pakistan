@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Price Tracker Pakistan</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
+        .search-box { text-align: center; margin-bottom: 40px; }
+        input { width: 70%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        button { padding: 10px 20px; background-color: black; color: white; border: none; cursor: pointer; }
+        .card { border: 1px solid #ddd; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .price-big { font-size: 40px; color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="search-box">
+        <h1>🇵🇰 Price Tracker</h1>
+        <form method="POST">
+            <input type="text" name="link" placeholder="Paste Khaadi Product Link here..." required>
+            <button type="submit">Track</button>
+        </form>
+    </div>
+
+    {% if data %}
+    <div class="card">
+        <h2>{{ data.name }}</h2>
+        <div class="price-big">PKR {{ data.current_price }}</div>
+        
+        <canvas id="priceChart"></canvas>
+    </div>
+
+    <script>
+        // Get the data from Python
+        const historyData = {{ data.history | tojson }};
+        
+        // Extract Labels (Dates) and Data (Prices)
+        const labels = historyData.map(item => item.date);
+        const prices = historyData.map(item => item.price);
+
+        // Draw the Chart
+        const ctx = document.getElementById('priceChart');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Price History (PKR)',
+                    data: prices,
+                    borderColor: 'green',
+                    tension: 0.1
+                }]
+            }
+        });
+    </script>
+    {% endif %}
+
+</body>
+</html>
