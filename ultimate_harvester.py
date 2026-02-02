@@ -71,8 +71,20 @@ def main():
     print(f" -> Current Database Size: {len(unique_links)}")
 
     with sync_playwright() as p:
-        # Launch Browser (Headless=False means YOU WILL SEE IT WORKING)
-        browser = p.chromium.launch(headless=False)
+        # --- SMART MODE ---
+        # If "GITHUB_ACTIONS" exists, we are on the cloud -> Use Headless (Invisible)
+        # If not, we are on your laptop -> Use Headaded (Visible)
+        is_cloud = os.getenv("GITHUB_ACTIONS") == "true"
+        
+        if is_cloud:
+            print(" -> Detected Cloud Environment. Running in INVISIBLE Mode.")
+        else:
+            print(" -> Detected Laptop. Running in VISIBLE Mode.")
+
+        # Launch Browser with the smart flag
+        browser = p.chromium.launch(headless=is_cloud)
+        
+        # Create a new page
         page = browser.new_page()
         
         for url in categories:
@@ -82,7 +94,6 @@ def main():
                 # Filter and Add
                 new_count = 0
                 for link in found_links:
-                    # Clean URL
                     if '?' in link:
                         clean_link = link.split('?')[0]
                     else:
