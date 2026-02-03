@@ -7,17 +7,14 @@ st.set_page_config(page_title="SaleSpy: Dhoka Check", page_icon="🕵️‍♂�
 
 # --- HEADER ---
 st.title("🕵️‍♂️ SaleSpy")
-st.write("Paste a Khaadi product link to see its *real* price history.")
+st.write("Track the *real* price history of Khaadi products.")
 
 # --- LOAD DATA ---
 @st.cache_data
 def load_data():
     try:
-        # Load the CSV
         df = pd.read_csv("prices.csv")
-        # Convert Date column to actual Date format
         df["Date"] = pd.to_datetime(df["Date"])
-        # Sort by date
         df = df.sort_values("Date")
         return df
     except FileNotFoundError:
@@ -25,69 +22,75 @@ def load_data():
 
 df = load_data()
 
-# --- SEARCH BAR ---
-# The user pastes a link here
-user_url = st.text_input("🔗 Paste Product URL here:", placeholder="https://pk.khaadi.com/...")
-
-if user_url:
-    if df.empty:
-        st.error("⚠️ Database is empty. Please run the tracker first.")
+if not df.empty:
+    # --- SECTION 1: 🔥 HOT DEALS (The New Feature) ---
+    st.header("🔥 Today's Price Drops")
+    
+    # 1. Find the latest date in the database
+    latest_date = df["Date"].max()
+    
+    # 2. Get data for just today
+    today_data = df[df["Date"] == latest_date]
+    
+    deals = []
+    
+    # 3. Check each product for a price drop
+    for index, row in today_data.iterrows():
+        product_name = row["Name"]
+        current_price = float(row["Price"])
+        link = row["Link"]
+        
+        # Get history for this specific product
+        history = df[df["Name"] == product_name]
+        
+        # We need at least 2 days of data to compare
+        if len(history) > 1:
+            # Get the highest price in the last 30 days
+            max_price_30d = history["Price"].max()
+            
+            # If current price is lower than the high, it's a Deal!
+            if current_price < max_price_30d:
+                saving = max_price_30d - current_price
+                percent_off = int((saving / max_price_30d) * 100)
+                deals.append({
+                    "Product": product_name,
+                    "New Price": f"Rs. {int(current_price)}",
+                    "Was": f"Rs. {int(max_price_30d)}",
+                    "Saving": f"Rs. {int(saving)} ({percent_off}%)",
+                    "Link": link
+                })
+    
+    # 4. Show the Deals
+    if deals:
+        deals_df = pd.DataFrame(deals)
+        st.dataframe(deals_df, hide_index=True, use_container_width=True)
+        st.caption(f"Found {len(deals)} items cheaper today than their recent high.")
     else:
-        # --- SMART CLEANING ---
-        # The user might paste a link with "?start=24" or "?source=fb"
-        # We strip that off to match your clean database links.
-        clean_input = user_url.split('?')[0].strip()
+        st.info("No price drops detected today. Khaadi is holding prices steady.")
+
+    st.markdown("---")
+
+# --- SECTION 2: SEARCH BAR (Existing Feature) ---
+user_url = st.text_input("🔗 Paste Product URL to check history:", placeholder="https://pk.khaadi.com/...")
+
+if user_url and not df.empty:
+    clean_input = user_url.split('?')[0].strip()
+    product_data = df[df["Link"] == clean_input]
+    
+    if not product_data.empty:
+        product_name = product_data.iloc[-1]["Name"]
+        current_price = product_data.iloc[-1]["Price"]
+        max_price = product_data["Price"].max()
+        min_price = product_data["Price"].min()
         
-        # Search for the link in your database
-        product_data = df[df["Link"] == clean_input]
+        st.subheader(product_name)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Current", f"Rs. {current_price}")
+        c2.metric("Highest", f"Rs. {max_price}")
+        c3.metric("Lowest", f"Rs. {min_price}")
         
-        if not product_data.empty:
-            # Get Product Details from the latest entry
-            product_name = product_data.iloc[-1]["Name"]
-            current_price = product_data.iloc[-1]["Price"]
-            
-            # Calculate Stats
-            max_price = product_data["Price"].max()
-            min_price = product_data["Price"].min()
-            
-            # --- DISPLAY RESULT ---
-            st.subheader(f"History for: {product_name}")
-            
-            # Stats Columns
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Current Price", f"Rs. {current_price}")
-            c2.metric("Highest Price", f"Rs. {max_price}")
-            c3.metric("Lowest Price", f"Rs. {min_price}")
-            
-            # --- THE GRAPH ---
-            # We explicitly set the range to 0 so the graph doesn't look misleading
-            fig = px.line(product_data, x="Date", y="Price", markers=True)
-            fig.update_yaxes(range=[0, float(max_price) * 1.2]) # Scale y-axis nicely
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # --- DHOKA VERDICT ---
-            st.subheader("⚠️ Verdict")
-            try:
-                curr_float = float(current_price)
-                max_float = float(max_price)
-                min_float = float(min_price)
-
-                if curr_float < max_float:
-                    savings = max_float - curr_float
-                    st.success(f"✅ **GOOD DEAL!** This item is **Rs. {savings} cheaper** than its usual price.")
-                elif curr_float > min_float:
-                    st.warning(f"⚠️ **PRICE HIKE!** This item is currently expensive. Lowest recorded was Rs. {min_float}.")
-                else:
-                    st.info("ℹ️ **STANDARD PRICE.** This is the normal price for this item.")
-            except:
-                st.info("Price data is stable.")
-
-        else:
-            # If link not found
-            st.warning("❌ **Product Not Found.**")
-            st.write(f"We are not tracking this exact link yet. Try checking the URL.")
-            st.write(f"**Your Input:** {clean_input}")
-
-else:
-    # Optional: Show a "How it works" when empty
-    st.info("👈 Paste a link above to start the Dhoka Check.")
+        fig = px.line(product_data, x="Date", y="Price", markers=True)
+        fig.update_yaxes(range=[0, float(max_price) * 1.2])
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Product not found in database.")
