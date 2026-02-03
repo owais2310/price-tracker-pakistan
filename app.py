@@ -7,7 +7,7 @@ st.set_page_config(page_title="SaleSpy: Dhoka Check", page_icon="🕵️‍♂�
 
 # --- HEADER ---
 st.title("🕵️‍♂️ SaleSpy")
-st.write("Track the *real* price history of Khaadi products.")
+st.write("Paste a Khaadi product link to see its *real* price history.")
 
 # --- LOAD DATA ---
 @st.cache_data
@@ -22,78 +22,55 @@ def load_data():
 
 df = load_data()
 
-if not df.empty:
-    # --- SECTION 1: 🔥 HOT DEALS (The New Feature) ---
-    st.header("🔥 Today's Price Drops")
-    
-    # 1. Find the latest date in the database
-    latest_date = df["Date"].max()
-    
-    # 2. Get data for just today
-    today_data = df[df["Date"] == latest_date]
-    
-    deals = []
-    
-    # 3. Check each product for a price drop
-    for index, row in today_data.iterrows():
-        product_name = row["Name"]
-        current_price = float(row["Price"])
-        link = row["Link"]
-        
-        # Get history for this specific product
-        history = df[df["Name"] == product_name]
-        
-        # We need at least 2 days of data to compare
-        if len(history) > 1:
-            # Get the highest price in the last 30 days
-            max_price_30d = history["Price"].max()
-            
-            # If current price is lower than the high, it's a Deal!
-            if current_price < max_price_30d:
-                saving = max_price_30d - current_price
-                percent_off = int((saving / max_price_30d) * 100)
-                deals.append({
-                    "Product": product_name,
-                    "New Price": f"Rs. {int(current_price)}",
-                    "Was": f"Rs. {int(max_price_30d)}",
-                    "Saving": f"Rs. {int(saving)} ({percent_off}%)",
-                    "Link": link
-                })
-    
-    # 4. Show the Deals
-    if deals:
-        deals_df = pd.DataFrame(deals)
-        st.dataframe(deals_df, hide_index=True, use_container_width=True)
-        st.caption(f"Found {len(deals)} items cheaper today than their recent high.")
-    else:
-        st.info("No price drops detected today. Khaadi is holding prices steady.")
-
-    st.markdown("---")
-
-# --- SECTION 2: SEARCH BAR (Existing Feature) ---
+# --- SEARCH BAR ---
 user_url = st.text_input("🔗 Paste Product URL to check history:", placeholder="https://pk.khaadi.com/...")
 
-if user_url and not df.empty:
-    clean_input = user_url.split('?')[0].strip()
-    product_data = df[df["Link"] == clean_input]
-    
-    if not product_data.empty:
-        product_name = product_data.iloc[-1]["Name"]
-        current_price = product_data.iloc[-1]["Price"]
-        max_price = product_data["Price"].max()
-        min_price = product_data["Price"].min()
-        
-        st.subheader(product_name)
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Current", f"Rs. {current_price}")
-        c2.metric("Highest", f"Rs. {max_price}")
-        c3.metric("Lowest", f"Rs. {min_price}")
-        
-        fig = px.line(product_data, x="Date", y="Price", markers=True)
-        fig.update_yaxes(range=[0, float(max_price) * 1.2])
-        st.plotly_chart(fig, use_container_width=True)
+if user_url:
+    if df.empty:
+        st.error("⚠️ Database is empty. Please run the tracker first.")
     else:
-        st.warning("Product not found in database.")
+        # Clean the input link
+        clean_input = user_url.split('?')[0].strip()
+        
+        # Search in database
+        product_data = df[df["Link"] == clean_input]
+        
+        if not product_data.empty:
+            # Get latest details
+            product_name = product_data.iloc[-1]["Name"]
+            current_price = product_data.iloc[-1]["Price"]
+            max_price = product_data["Price"].max()
+            min_price = product_data["Price"].min()
+            
+            # Display Stats
+            st.subheader(product_name)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Current Price", f"Rs. {current_price}")
+            c2.metric("Highest Price", f"Rs. {max_price}")
+            c3.metric("Lowest Price", f"Rs. {min_price}")
+            
+            # Display Graph
+            fig = px.line(product_data, x="Date", y="Price", markers=True)
+            fig.update_yaxes(range=[0, float(max_price) * 1.2]) # Nice scaling
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Verdict Logic
+            curr_float = float(current_price)
+            max_float = float(max_price)
+            
+            st.subheader("⚠️ Verdict")
+            if curr_float < max_float:
+                save = max_float - curr_float
+                st.success(f"✅ **GOOD DEAL!** Cheaper by Rs. {save} compared to its history.")
+            elif curr_float > float(min_price):
+                st.warning(f"⚠️ **PRICE HIKE!** Expensive. Lowest was Rs. {min_price}.")
+            else:
+                st.info("ℹ️ **STANDARD PRICE.** No major changes detected.")
+
+        else:
+            st.warning("❌ **Product Not Found.**")
+            st.write("We haven't tracked this specific link yet. Try another one!")
+
 # --- SIDEBAR INFO ---
 with st.sidebar:
     st.header("ℹ️ About SaleSpy")
