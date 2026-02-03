@@ -94,3 +94,13 @@ if user_url and not df.empty:
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Product not found in database.")
+# --- SIDEBAR INFO ---
+with st.sidebar:
+    st.header("ℹ️ About SaleSpy")
+    st.write("""
+    **SaleSpy** tracks prices daily to detect:
+    * 📉 Real Price Drops
+    * 📈 Hidden Price Hikes
+    * ❌ Fake 'Sales'
+    """)
+    st.caption("Built by Owais Ahmad | Data updates daily at 10 AM PKT")
