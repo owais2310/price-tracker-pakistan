@@ -1,122 +1,123 @@
-from playwright.sync_api import sync_playwright
-import time
+import requests
+from bs4 import BeautifulSoup
+import csv
 import os
+from datetime import datetime
+import random
+import time
 
-# --- CONFIGURATION ---
-# The main aisles of the store. Add more if you want (Kids, Home, etc.)
-categories = [
-    "https://pk.khaadi.com/new-in.html",
-    "https://pk.khaadi.com/unstitched.html",
-    "https://pk.khaadi.com/ready-to-wear.html",
-    "https://pk.khaadi.com/west.html",
-    "https://pk.khaadi.com/sale.html"
-]
+class UltimateHarvester:
+    def __init__(self):
+        self.prices_file = "prices.csv"
+        self.links_file = "links.txt"
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
 
-link_file = "links.txt"
+    def fetch_page(self, url):
+        """Downloads the HTML of the page nicely."""
+        try:
+            time.sleep(random.uniform(1, 3)) # Sleep to act human
+            response = requests.get(url, headers=self.headers, timeout=10)
+            if response.status_code == 200:
+                return response.text
+            return None
+        except Exception as e:
+            print(f"Failed to fetch {url}: {e}")
+            return None
 
-def harvest_category(page, url):
-    print(f"\n--- Navigating to: {url} ---")
-    page.goto(url, timeout=60000) # Give it 60 seconds to load
-    
-    # 1. Handle "Accept Cookies" or Popups (optional, but good practice)
-    try:
-        page.locator("button:has-text('Accept')").click(timeout=2000)
-    except:
-        pass
+    def parse_product(self, url):
+        """Extracts the Real Name and Real Price (ignoring discounts)."""
+        html = self.fetch_page(url)
+        if not html:
+            return None
 
-    # 2. THE INFINITE SCROLL HACK
-    # We scroll down, wait for new items, and repeat until no new items appear.
-    last_height = page.evaluate("document.body.scrollHeight")
-    scroll_attempts = 0
-    max_scrolls = 50  # Safety limit (50 scrolls * 24 items = 1200 items per category)
-    
-    print("   -> Starting Infinite Scroll...")
-    
-    while scroll_attempts < max_scrolls:
-        # Scroll to bottom
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        print(f"      Scroll {scroll_attempts+1}/{max_scrolls}...")
+        soup = BeautifulSoup(html, 'html.parser')
         
-        # Wait for potential load (4 seconds)
-        time.sleep(4)
-        
-        # Calculate new height
-        new_height = page.evaluate("document.body.scrollHeight")
-        
-        # If height didn't change, we reached the bottom!
-        if new_height == last_height:
-            print("      -> Reached the bottom of the page!")
-            break
+        try:
+            # --- 1. SMART NAME EXTRACTOR ---
+            # Try to find the specific H1 title first (Class usually 'page-title')
+            name_element = soup.find('h1', class_='page-title')
             
-        last_height = new_height
-        scroll_attempts += 1
+            if name_element:
+                # Found the specific title
+                name = name_element.get_text(strip=True)
+            else:
+                # Fallback: Try any H1 if specific class is missing
+                h1_tag = soup.find('h1')
+                if h1_tag:
+                    name = h1_tag.get_text(strip=True)
+                else:
+                    name = "Unknown Product"
 
-    # 3. Extract Links
-    print("   -> Extracting product links...")
-    # This finds all 'a' tags that look like products
-    links = page.locator("div.pdp-link a").evaluate_all("list => list.map(element => element.href)")
-    
-    return links
-
-def main():
-    print("ULTIMATE HARVESTER: Initializing Browser Engine...")
-    
-    unique_links = set()
-    
-    # Load existing database
-    if os.path.exists(link_file):
-        with open(link_file, 'r') as f:
-            unique_links = set(line.strip() for line in f.readlines() if line.strip())
-    
-    print(f" -> Current Database Size: {len(unique_links)}")
-
-    with sync_playwright() as p:
-        # --- SMART MODE ---
-        # If "GITHUB_ACTIONS" exists, we are on the cloud -> Use Headless (Invisible)
-        # If not, we are on your laptop -> Use Headaded (Visible)
-        is_cloud = os.getenv("GITHUB_ACTIONS") == "true"
-        
-        if is_cloud:
-            print(" -> Detected Cloud Environment. Running in INVISIBLE Mode.")
-        else:
-            print(" -> Detected Laptop. Running in VISIBLE Mode.")
-
-        # Launch Browser with the smart flag
-        browser = p.chromium.launch(headless=is_cloud)
-        
-        # Create a new page
-        page = browser.new_page()
-        
-        for url in categories:
-            try:
-                found_links = harvest_category(page, url)
-                
-                # Filter and Add
-                new_count = 0
-                for link in found_links:
-                    if '?' in link:
-                        clean_link = link.split('?')[0]
-                    else:
-                        clean_link = link
-                        
-                    if clean_link not in unique_links:
-                        unique_links.add(clean_link)
-                        new_count += 1
-                
-                print(f"   -> Found {len(found_links)} total items. {new_count} were NEW.")
-                
-            except Exception as e:
-                print(f"   -> Error on {url}: {e}")
-
-        browser.close()
-
-    # Save to file
-    print(f"\nSaving Master Database...")
-    with open(link_file, 'w') as f:
-        for link in sorted(unique_links):
-            f.write(link + "\n")
+            # --- 2. SMART PRICE EXTRACTOR ---
+            # Find all potential price numbers on the page
+            price_elements = soup.find_all(class_='price')
             
-    print(f"SUCCESS: Total Genuine Database: {len(unique_links)} products.")
+            found_price = None
+            
+            for p in price_elements:
+                text = p.get_text(strip=True)
+                # Clean the text: remove 'PKR', 'Rs', commas, etc.
+                digits = ''.join(filter(str.isdigit, text))
+                
+                if digits:
+                    amount = int(digits)
+                    
+                    # THE SAFETY FILTER: 
+                    # If price is < 500, it is likely a "30% OFF" label or a glitch.
+                    # Khaadi suits are rarely Rs. 40.
+                    if amount > 500:
+                        found_price = amount
+                        break # Stop as soon as we find a realistic price
+            
+            if not found_price:
+                print(f"⚠️ Skipped: No valid price > Rs. 500 found for {url}")
+                return None
+
+            return {
+                "Date": datetime.now().strftime("%Y-%m-%d"),
+                "Name": name,
+                "Price": found_price,
+                "Link": url
+            }
+
+        except Exception as e:
+            print(f"Error parsing {url}: {e}")
+            return None
+
+    def harvest(self):
+        """Main loop: Reads links, gets prices, saves to CSV."""
+        if not os.path.exists(self.links_file):
+            print("Error: links.txt not found!")
+            return
+
+        # Read all links
+        with open(self.links_file, "r") as f:
+            links = [line.strip() for line in f if line.strip()]
+
+        print(f"🚀 Starting harvest on {len(links)} products...")
+        
+        new_data = []
+        for index, link in enumerate(links):
+            print(f"[{index+1}/{len(links)}] Scanning: {link[:50]}...")
+            product = self.parse_product(link)
+            
+            if product:
+                new_data.append(product)
+                print(f"   ✅ Found: {product['Name']} - Rs. {product['Price']}")
+
+        # Save to CSV
+        file_exists = os.path.exists(self.prices_file)
+        
+        with open(self.prices_file, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=["Date", "Name", "Price", "Link"])
+            if not file_exists:
+                writer.writeheader()
+            writer.writerows(new_data)
+            
+        print(f"\n✅ Harvest Complete! Added {len(new_data)} prices to database.")
 
 if __name__ == "__main__":
-    main()
+    bot = UltimateHarvester()
+    bot.harvest()
