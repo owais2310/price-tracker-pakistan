@@ -82,7 +82,7 @@ if user_url:
     if df.empty:
         st.error("⚠️ Database is empty. Please wait for the tracker to run.")
     else:
-        # Clean the input link (remove extra query parameters)
+        # Clean the input link
         clean_input = user_url.split('?')[0].strip()
         
         # Search in database
@@ -109,18 +109,18 @@ if user_url:
             
             # Customize the Graph for Dark Mode
             fig.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', # Transparent background
-                plot_bgcolor='rgba(0,0,0,0)',  # Transparent plot area
-                font=dict(color="white"),      # White text for axes
-                margin=dict(l=10, r=10, t=30, b=10), # Tight margins for mobile
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',  
+                font=dict(color="white"),      
+                margin=dict(l=10, r=10, t=30, b=10), 
                 xaxis=dict(showgrid=False, linecolor='#333333'),
                 yaxis=dict(showgrid=True, gridcolor='#222222', zerolinecolor='#333333'),
                 hovermode="x unified"
             )
-            # Make the line Neon Green
+            # FIX: Corrected line_width syntax here
             fig.update_traces(
                 line_color='#00FF41', 
-                width=3, 
+                line_width=3,  # <--- This was the fix
                 marker=dict(size=8, color='#00FF41')
             )
             
