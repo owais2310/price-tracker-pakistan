@@ -2,8 +2,58 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# --- PAGE CONFIG ---
+# --- PAGE CONFIGURATION (Must be the first line) ---
 st.set_page_config(page_title="SaleSpy: Dhoka Check", page_icon="🕵️‍♂️", layout="centered")
+
+# --- CUSTOM CSS: DARK MODE & HACKER AESTHETIC ---
+st.markdown("""
+<style>
+    /* 1. HIDE STREAMLIT BRANDING */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* 2. MAIN BACKGROUND & TEXT */
+    .stApp {
+        background-color: #000000; /* Pitch Black */
+        color: #00FF41; /* Hacker Green */
+    }
+
+    /* 3. INPUT FIELD (SEARCH BAR) */
+    div[data-baseweb="input"] {
+        background-color: #111111 !important; /* Dark Grey */
+        border: 1px solid #00FF41 !important; /* Green Border */
+        color: #ffffff !important; /* White Text */
+        border-radius: 5px;
+    }
+    
+    /* 4. METRIC CARDS (Prices) */
+    div[data-testid="stMetricValue"] {
+        color: #ffffff !important; /* White Numbers */
+        font-family: 'Courier New', monospace; /* Hacker Font */
+    }
+    div[data-testid="stMetricLabel"] {
+        color: #aaaaaa !important; /* Grey Labels */
+    }
+
+    /* 5. SIDEBAR STYLING */
+    section[data-testid="stSidebar"] {
+        background-color: #0a0a0a !important; /* Very Dark Grey */
+        border-right: 1px solid #333333;
+    }
+
+    /* 6. BUTTONS */
+    button {
+        border: 1px solid #00FF41 !important;
+        color: #00FF41 !important;
+        background-color: transparent !important;
+    }
+    button:hover {
+        background-color: #00FF41 !important;
+        color: #000000 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # --- HEADER ---
 st.title("🕵️‍♂️ SaleSpy")
@@ -27,9 +77,9 @@ user_url = st.text_input("🔗 Paste Product URL to check history:", placeholder
 
 if user_url:
     if df.empty:
-        st.error("⚠️ Database is empty. Please run the tracker first.")
+        st.error("⚠️ Database is empty. Please wait for the tracker to run.")
     else:
-        # Clean the input link
+        # Clean the input link (remove extra query parameters)
         clean_input = user_url.split('?')[0].strip()
         
         # Search in database
@@ -42,26 +92,45 @@ if user_url:
             max_price = product_data["Price"].max()
             min_price = product_data["Price"].min()
             
-            # Display Stats
-            st.subheader(product_name)
+            # Display Product Name & Stats
+            st.markdown(f"### {product_name}")
+            
+            # Use columns for metrics
             c1, c2, c3 = st.columns(3)
             c1.metric("Current Price", f"Rs. {current_price}")
             c2.metric("Highest Price", f"Rs. {max_price}")
             c3.metric("Lowest Price", f"Rs. {min_price}")
             
-            # Display Graph
+            # --- NEON GRAPH LOGIC ---
             fig = px.line(product_data, x="Date", y="Price", markers=True)
-            fig.update_yaxes(range=[0, float(max_price) * 1.2]) # Nice scaling
+            
+            # Customize the Graph for Dark Mode
+            fig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', # Transparent background
+                plot_bgcolor='rgba(0,0,0,0)',  # Transparent plot area
+                font=dict(color="white"),      # White text for axes
+                margin=dict(l=10, r=10, t=30, b=10), # Tight margins for mobile
+                xaxis=dict(showgrid=False, linecolor='#333333'),
+                yaxis=dict(showgrid=True, gridcolor='#222222', zerolinecolor='#333333'),
+                hovermode="x unified"
+            )
+            # Make the line Neon Green
+            fig.update_traces(
+                line_color='#00FF41', 
+                width=3, 
+                marker=dict(size=8, color='#00FF41')
+            )
+            
             st.plotly_chart(fig, use_container_width=True)
             
-            # Verdict Logic
+            # --- VERDICT LOGIC ---
             curr_float = float(current_price)
             max_float = float(max_price)
             
-            st.subheader("⚠️ Verdict")
+            st.markdown("### ⚠️ Verdict")
             if curr_float < max_float:
                 save = max_float - curr_float
-                st.success(f"✅ **GOOD DEAL!** Cheaper by Rs. {save} compared to its history.")
+                st.success(f"✅ **GOOD DEAL!** Cheaper by Rs. {save} compared to history.")
             elif curr_float > float(min_price):
                 st.warning(f"⚠️ **PRICE HIKE!** Expensive. Lowest was Rs. {min_price}.")
             else:
@@ -74,7 +143,7 @@ if user_url:
 # --- SIDEBAR INFO ---
 with st.sidebar:
     st.header("ℹ️ About SaleSpy")
-    st.write("""
+    st.markdown("""
     **SaleSpy** tracks prices daily to detect:
     * 📉 Real Price Drops
     * 📈 Hidden Price Hikes
