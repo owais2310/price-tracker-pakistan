@@ -2,24 +2,27 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# --- PAGE CONFIGURATION (Must be the first line) ---
+# --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="SaleSpy: Dhoka Check", page_icon="🕵️‍♂️", layout="centered")
 
 # --- CUSTOM CSS: DARK MODE & HACKER AESTHETIC ---
 st.markdown("""
 <style>
-    /* 1. HIDE STREAMLIT BRANDING */
+    /* 1. HIDE STREAMLIT BRANDING & MENU */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
+    
+    /* 2. HIDE THE RED 'DEPLOY' BUTTON (Admin View) */
+    .stDeployButton {display:none;}
 
-    /* 2. MAIN BACKGROUND & TEXT */
+    /* 3. MAIN BACKGROUND & TEXT */
     .stApp {
         background-color: #000000; /* Pitch Black */
         color: #00FF41; /* Hacker Green */
     }
 
-    /* 3. INPUT FIELD (SEARCH BAR) */
+    /* 4. INPUT FIELD (SEARCH BAR) */
     div[data-baseweb="input"] {
         background-color: #111111 !important; /* Dark Grey */
         border: 1px solid #00FF41 !important; /* Green Border */
@@ -27,7 +30,7 @@ st.markdown("""
         border-radius: 5px;
     }
     
-    /* 4. METRIC CARDS (Prices) */
+    /* 5. METRIC CARDS (Prices) */
     div[data-testid="stMetricValue"] {
         color: #ffffff !important; /* White Numbers */
         font-family: 'Courier New', monospace; /* Hacker Font */
@@ -36,13 +39,13 @@ st.markdown("""
         color: #aaaaaa !important; /* Grey Labels */
     }
 
-    /* 5. SIDEBAR STYLING */
+    /* 6. SIDEBAR STYLING */
     section[data-testid="stSidebar"] {
         background-color: #0a0a0a !important; /* Very Dark Grey */
         border-right: 1px solid #333333;
     }
 
-    /* 6. BUTTONS */
+    /* 7. BUTTONS */
     button {
         border: 1px solid #00FF41 !important;
         color: #00FF41 !important;
