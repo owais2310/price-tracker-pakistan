@@ -5,40 +5,36 @@ import os
 from datetime import datetime
 import random
 import time
-import json  # <--- CRITICAL NEW IMPORT
+import re  # <--- The Regex Tool
 
 class UltimateHarvester:
     def __init__(self):
         self.prices_file = "prices.csv"
         self.links_file = "links.txt"
         
-        # HEADERS: Act like a real Chrome browser
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": "https://pk.khaadi.com/"
         }
         
-        # COOKIES: FORCE the server to show Pakistan Store (PKR)
         self.cookies = {
             "store": "pk",
             "context": "b2c_pk_store_view"
         }
 
     def fetch_page(self, url):
-        """Downloads the HTML using Pakistan Cookies."""
         try:
             time.sleep(random.uniform(1, 3)) 
             response = requests.get(url, headers=self.headers, cookies=self.cookies, timeout=10)
             if response.status_code == 200:
                 return response.text
             return None
-        except Exception as e:
-            print(f"Failed to fetch {url}: {e}")
+        except Exception:
             return None
 
     def parse_product(self, url):
-        """Extracts Data from JSON-LD (Google Data) to avoid HTML errors."""
+        """REGEX MODE: Scans raw text for 'price': 9500 pattern."""
         if "pk.khaadi.com" not in url:
             return None
 
@@ -46,94 +42,58 @@ class UltimateHarvester:
         if not html:
             return None
 
+        # 1. GET NAME (Standard method)
         soup = BeautifulSoup(html, 'html.parser')
+        name_element = soup.find('h1', class_='page-title')
+        if name_element:
+            name = name_element.get_text(strip=True)
+        else:
+            name = "Unknown Product"
+
+        # 2. GET PRICE (The Vacuum Method)
+        # This regex looks for "price": "1234" OR "price": 1234 anywhere in the file
+        # It catches the dataLayer, JSON-LD, and GA4 tags.
+        price_matches = re.findall(r'"price"\s*:\s*"?([\d,.]+)"?', html)
         
-        try:
-            found_price = None
-            found_name = "Unknown Product"
+        found_price = None
+        
+        for p in price_matches:
+            try:
+                # Clean the number (remove dots and commas)
+                # "9500.00" -> "9500"
+                if "." in p:
+                    p = p.split(".")[0]
+                
+                clean_digits = ''.join(filter(str.isdigit, p))
+                
+                if clean_digits:
+                    amount = int(clean_digits)
+                    # THE FILTER: Must be real price (> 500)
+                    if amount > 500:
+                        found_price = amount
+                        break
+            except:
+                continue
 
-            # --- STRATEGY 1: JSON-LD (The "Gold Mine") ---
-            # We look for the special script tag that contains trusted product data
-            json_tags = soup.find_all('script', type='application/ld+json')
-            
-            for tag in json_tags:
-                try:
-                    if not tag.string: continue
-                    
-                    data = json.loads(tag.string)
-                    
-                    # Search inside the JSON structure
-                    # 1. Check if it's a Product
-                    if data.get('@type') == 'Product':
-                        found_name = data.get('name', found_name)
-                        
-                        # 2. Extract Price from 'offers'
-                        offers = data.get('offers')
-                        price_raw = None
-                        
-                        if isinstance(offers, dict):
-                            price_raw = offers.get('price')
-                        elif isinstance(offers, list) and len(offers) > 0:
-                            price_raw = offers[0].get('price')
-                            
-                        # 3. Clean and Validate Price
-                        if price_raw:
-                            # Remove decimals "9500.00" -> "9500"
-                            price_str = str(price_raw).split('.')[0] 
-                            clean_price = int(''.join(filter(str.isdigit, price_str)))
-                            
-                            if clean_price > 500:
-                                found_price = clean_price
-                                break # Stop searching, we found it!
-                                
-                except Exception as json_error:
-                    continue
-
-            # --- STRATEGY 2: FALLBACK HTML (Backup Plan) ---
-            # If JSON failed, try the old HTML method but with STRICT checks
-            if not found_price:
-                price_elements = soup.find_all(class_='price')
-                for p in price_elements:
-                    text = p.get_text(strip=True)
-                    
-                    # CRITICAL FIX: Stop reading at the dot!
-                    if "." in text: 
-                        text = text.split(".")[0]
-                        
-                    digits = ''.join(filter(str.isdigit, text))
-                    
-                    if digits:
-                        amount = int(digits)
-                        if amount > 500:
-                            found_price = amount
-                            break
-
-            # --- FINAL VALIDATION ---
-            if not found_price:
-                print(f"⚠️ Skipped: No valid price > 500 found for {url}")
-                return None
-
-            return {
-                "Date": datetime.now().strftime("%Y-%m-%d"),
-                "Name": found_name,
-                "Price": found_price,
-                "Link": url
-            }
-
-        except Exception as e:
-            print(f"Error parsing {url}: {e}")
+        if not found_price:
+            print(f"⚠️ Skipped: No valid price > 500 found for {url}")
             return None
 
+        return {
+            "Date": datetime.now().strftime("%Y-%m-%d"),
+            "Name": name,
+            "Price": found_price,
+            "Link": url
+        }
+
     def harvest(self):
-        """Main loop."""
         if not os.path.exists(self.links_file):
-            print("Error: links.txt not found!")
             return
 
         with open(self.links_file, "r") as f:
             links = [line.strip() for line in f if line.strip()]
 
-        print(f"🚀 Starting harvest on {len(links)} products...")
+        print(f"🚀 Starting Regex Harvest on {len(links)} products...")
         
         new_data = []
         for index, link in enumerate(links):
