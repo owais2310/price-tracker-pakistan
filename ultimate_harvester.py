@@ -21,17 +21,14 @@ class UltimateHarvester:
         # COOKIES: FORCE the server to show Pakistan Store (PKR)
         self.cookies = {
             "store": "pk",
-            "context": "b2c_pk_store_view" # This tells Khaadi "I am in Pakistan"
+            "context": "b2c_pk_store_view"
         }
 
     def fetch_page(self, url):
         """Downloads the HTML using Pakistan Cookies."""
         try:
-            time.sleep(random.uniform(1, 3)) # Sleep to act human
-            
-            # We send the cookies with the request to force PK version
+            time.sleep(random.uniform(1, 3)) 
             response = requests.get(url, headers=self.headers, cookies=self.cookies, timeout=10)
-            
             if response.status_code == 200:
                 return response.text
             return None
@@ -41,11 +38,7 @@ class UltimateHarvester:
 
     def parse_product(self, url):
         """Extracts Real Name and Price (PKR Only)."""
-        
-        # --- PATRIOT FILTER ---
-        # If the link is for USA or UK, ignore it immediately.
         if "pk.khaadi.com" not in url:
-            print(f"🚫 Ignoring Foreign Link: {url}")
             return None
 
         html = self.fetch_page(url)
@@ -63,7 +56,7 @@ class UltimateHarvester:
                 h1_tag = soup.find('h1')
                 name = h1_tag.get_text(strip=True) if h1_tag else "Unknown Product"
 
-            # --- 2. SMART PRICE EXTRACTOR ---
+            # --- 2. DECIMAL-SAFE PRICE EXTRACTOR ---
             price_elements = soup.find_all(class_='price')
             
             found_price = None
@@ -71,10 +64,10 @@ class UltimateHarvester:
             for p in price_elements:
                 text = p.get_text(strip=True)
                 
-                # Check for currency symbols to ensure it's not USD
-                if "$" in text or "USD" in text or "£" in text:
-                    print(f"⚠️ Warning: Found foreign currency in {url}. Skipping.")
-                    continue
+                # CRITICAL FIX: Stop reading at the dot!
+                # "PKR 40.00" -> "PKR 40"
+                if "." in text:
+                    text = text.split(".")[0]
 
                 # Clean digits
                 digits = ''.join(filter(str.isdigit, text))
@@ -82,7 +75,7 @@ class UltimateHarvester:
                 if digits:
                     amount = int(digits)
                     
-                    # LOGIC: Khaadi PK prices are usually > 500
+                    # LOGIC: Ignore anything under 500 (covers 40, 4000 error, etc.)
                     if amount > 500:
                         found_price = amount
                         break 
@@ -109,14 +102,12 @@ class UltimateHarvester:
             return
 
         with open(self.links_file, "r") as f:
-            # Only load valid lines
             links = [line.strip() for line in f if line.strip()]
 
         print(f"🚀 Starting harvest on {len(links)} products...")
         
         new_data = []
         for index, link in enumerate(links):
-            # Double check link before processing
             if "pk.khaadi.com" not in link:
                 continue
 
