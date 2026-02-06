@@ -5,23 +5,20 @@ import os
 from datetime import datetime
 import random
 import time
-import re  # <--- The Regex Tool
+import re  # <--- The Key Tool
 
 class UltimateHarvester:
     def __init__(self):
         self.prices_file = "prices.csv"
         self.links_file = "links.txt"
         
+        # Headers to look like a real browser
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": "https://pk.khaadi.com/"
         }
-        
-        self.cookies = {
-            "store": "pk",
-            "context": "b2c_pk_store_view"
-        }
+        self.cookies = {"store": "pk", "context": "b2c_pk_store_view"}
 
     def fetch_page(self, url):
         try:
@@ -34,7 +31,7 @@ class UltimateHarvester:
             return None
 
     def parse_product(self, url):
-        """REGEX MODE: Scans raw text for 'price': 9500 pattern."""
+        """REGEX MODE: Ignores HTML tags. Scans for 'price': 9500 pattern only."""
         if "pk.khaadi.com" not in url:
             return None
 
@@ -51,16 +48,14 @@ class UltimateHarvester:
             name = "Unknown Product"
 
         # 2. GET PRICE (The Vacuum Method)
-        # This regex looks for "price": "1234" OR "price": 1234 anywhere in the file
-        # It catches the dataLayer, JSON-LD, and GA4 tags.
+        # Finds "price": 9500 inside JSON or DataLayer
         price_matches = re.findall(r'"price"\s*:\s*"?([\d,.]+)"?', html)
         
         found_price = None
         
         for p in price_matches:
             try:
-                # Clean the number (remove dots and commas)
-                # "9500.00" -> "9500"
+                # Clean: "9500.00" -> "9500"
                 if "." in p:
                     p = p.split(".")[0]
                 
@@ -68,7 +63,7 @@ class UltimateHarvester:
                 
                 if clean_digits:
                     amount = int(clean_digits)
-                    # THE FILTER: Must be real price (> 500)
+                    # STRICT FILTER: Ignore anything under 500
                     if amount > 500:
                         found_price = amount
                         break
