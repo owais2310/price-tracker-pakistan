@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 import random
 import time
+import json  # <--- CRITICAL NEW IMPORT
 
 class UltimateHarvester:
     def __init__(self):
@@ -37,7 +38,7 @@ class UltimateHarvester:
             return None
 
     def parse_product(self, url):
-        """Extracts Real Name and Price (PKR Only)."""
+        """Extracts Data from JSON-LD (Google Data) to avoid HTML errors."""
         if "pk.khaadi.com" not in url:
             return None
 
@@ -48,45 +49,73 @@ class UltimateHarvester:
         soup = BeautifulSoup(html, 'html.parser')
         
         try:
-            # --- 1. SMART NAME EXTRACTOR ---
-            name_element = soup.find('h1', class_='page-title')
-            if name_element:
-                name = name_element.get_text(strip=True)
-            else:
-                h1_tag = soup.find('h1')
-                name = h1_tag.get_text(strip=True) if h1_tag else "Unknown Product"
-
-            # --- 2. DECIMAL-SAFE PRICE EXTRACTOR ---
-            price_elements = soup.find_all(class_='price')
-            
             found_price = None
-            
-            for p in price_elements:
-                text = p.get_text(strip=True)
-                
-                # CRITICAL FIX: Stop reading at the dot!
-                # "PKR 40.00" -> "PKR 40"
-                if "." in text:
-                    text = text.split(".")[0]
+            found_name = "Unknown Product"
 
-                # Clean digits
-                digits = ''.join(filter(str.isdigit, text))
-                
-                if digits:
-                    amount = int(digits)
-                    
-                    # LOGIC: Ignore anything under 500 (covers 40, 4000 error, etc.)
-                    if amount > 500:
-                        found_price = amount
-                        break 
+            # --- STRATEGY 1: JSON-LD (The "Gold Mine") ---
+            # We look for the special script tag that contains trusted product data
+            json_tags = soup.find_all('script', type='application/ld+json')
             
+            for tag in json_tags:
+                try:
+                    if not tag.string: continue
+                    
+                    data = json.loads(tag.string)
+                    
+                    # Search inside the JSON structure
+                    # 1. Check if it's a Product
+                    if data.get('@type') == 'Product':
+                        found_name = data.get('name', found_name)
+                        
+                        # 2. Extract Price from 'offers'
+                        offers = data.get('offers')
+                        price_raw = None
+                        
+                        if isinstance(offers, dict):
+                            price_raw = offers.get('price')
+                        elif isinstance(offers, list) and len(offers) > 0:
+                            price_raw = offers[0].get('price')
+                            
+                        # 3. Clean and Validate Price
+                        if price_raw:
+                            # Remove decimals "9500.00" -> "9500"
+                            price_str = str(price_raw).split('.')[0] 
+                            clean_price = int(''.join(filter(str.isdigit, price_str)))
+                            
+                            if clean_price > 500:
+                                found_price = clean_price
+                                break # Stop searching, we found it!
+                                
+                except Exception as json_error:
+                    continue
+
+            # --- STRATEGY 2: FALLBACK HTML (Backup Plan) ---
+            # If JSON failed, try the old HTML method but with STRICT checks
             if not found_price:
-                print(f"⚠️ Skipped: No valid PKR price > 500 found for {url}")
+                price_elements = soup.find_all(class_='price')
+                for p in price_elements:
+                    text = p.get_text(strip=True)
+                    
+                    # CRITICAL FIX: Stop reading at the dot!
+                    if "." in text: 
+                        text = text.split(".")[0]
+                        
+                    digits = ''.join(filter(str.isdigit, text))
+                    
+                    if digits:
+                        amount = int(digits)
+                        if amount > 500:
+                            found_price = amount
+                            break
+
+            # --- FINAL VALIDATION ---
+            if not found_price:
+                print(f"⚠️ Skipped: No valid price > 500 found for {url}")
                 return None
 
             return {
                 "Date": datetime.now().strftime("%Y-%m-%d"),
-                "Name": name,
+                "Name": found_name,
                 "Price": found_price,
                 "Link": url
             }
